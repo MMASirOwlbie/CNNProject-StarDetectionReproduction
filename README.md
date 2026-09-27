@@ -22,6 +22,8 @@ cd data_generation
 python download_darkframes.py  # Downloads stray light dark frame archives
 python main_generate_data.py
 ```
+Note that for this, we generated 500 total images, with 300 for training, and 100 each for both val and testing. 
+Did not perform night-sky testing on this; purely pulled metrics and compared accuracy, precision and F1 score from the official paper. (Specifically Tables II and III from Section IV. Experiments).
 
 3. Model Training & Monitoring
 ```bash
