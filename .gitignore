@@ -1,0 +1,7 @@
+
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+data_generation/dark_frames_straylight.zip
+data_generation/dark_frames_straylight/
+data_generation/training_data/

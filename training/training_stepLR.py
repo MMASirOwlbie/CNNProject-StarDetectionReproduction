@@ -203,3 +203,7 @@ if __name__ == '__main__':
     print("training finish")
 
 
+
+
+torch.save(model.state_dict(), './models/latest_model.pt')
+print('✅ Model successfully saved to ./models/latest_model.pt!')

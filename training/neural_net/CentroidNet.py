@@ -1,4 +1,4 @@
-from numpy.lib.arraypad import pad
+from numpy import pad
 import torch
 import torch.nn as nn
 import torch.nn.functional as F

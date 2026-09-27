@@ -312,11 +312,11 @@ def generate_and_save(star_img_sim_obj, num_sim, split, parent_dir):
 
     # create folders
     if not os.path.exists(parent_dir):
-        os.mkdir(parent_dir)
-    os.mkdir(img_path)
-    os.mkdir(dist_map_path)
-    os.mkdir(seg_map_path)
-    os.mkdir(centroid_path)
+        os.makedirs(exist_ok=True, name=parent_dir)
+    os.makedirs(exist_ok=True, name=img_path)
+    os.makedirs(exist_ok=True, name=dist_map_path)
+    os.makedirs(exist_ok=True, name=seg_map_path)
+    os.makedirs(exist_ok=True, name=centroid_path)
 
     rng = np.random.default_rng()
     v_input = np.array([0, 0, 0])
