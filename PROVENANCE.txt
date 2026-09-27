@@ -1,0 +1,17 @@
+
+1. Components! 
+| File / Component | Provenance Tag | Details / Key Changes |
+| `CentroidNet.py` (`ELUnet`) | **Adapted** | Replaced legacy, removed import `from numpy.lib.arraypad import pad` with standard top-level `from numpy import pad` to support modern NumPy environments.
+| `MobileUNet.py` | **Reused as-is** | 
+
+
+2. Training Pipleine!
+
+| File / Component | Provenance Tag | Details / Key Changes |
+| `training_stepLR.py` | **Adapted** | Injected recursive `os.makedirs(exist_ok=True)` for `runs/`, `models/`, and `checkpoint/` directories.<br>• **Checkpointing Safeguard:** Added explicit saving upon training to ensure everything gets saved pls.
+
+3. Data Generation
+
+| File / Component | Provenance Tag | Details / Key Changes |
+| `main_generate_data.py` | **Adapted** | Replaced `os.mkdir()` calls with `os.makedirs(exist_ok=True)` to prevent termination when  directories already exist.
+| `sim/` (Simulation modules) | **Reused as-is** |
