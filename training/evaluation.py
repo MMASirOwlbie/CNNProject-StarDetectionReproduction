@@ -384,3 +384,333 @@ if __name__ == '__main__':
     plt.colorbar()
     plt.show()
 
+import os
+import torch
+import numpy as np
+import scipy.spatial
+import csv
+from torch.utils.data import DataLoader
+from data_load import StarDataSet
+
+
+%cd /content/CNNStarDetectCentroid/training
+metrics_path = "/content/CNNStarDetectCentroid/training/test_metrics.csv"
+
+from neural_net.elunet import ELUnet
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
+
+model = ELUnet(in_channels=1, out_channels=2).to(device)
+
+def extract_centroids(pred_binary, pred_offsets):
+    y_indices, x_indices = np.where(pred_binary > 0)
+
+    if len(y_indices) == 0:
+        return np.empty((0, 2))
+
+    dx = pred_offsets[0, y_indices, x_indices]
+    dy = pred_offsets[1, y_indices, x_indices]
+
+    pred_x = x_indices + dx
+    pred_y = y_indices + dy
+
+    return np.column_stack((pred_x, pred_y))
+
+
+def match_star_centroids(pred_coords, gt_coords, dist_threshold=1.5):
+    if len(pred_coords) == 0:
+        return 0, 0, len(gt_coords)
+    if len(gt_coords) == 0:
+        return 0, len(pred_coords), 0
+
+    dists = scipy.spatial.distance.cdist(pred_coords, gt_coords)
+
+    pred_indices, gt_indices = np.where(dists <= dist_threshold)
+    sorted_pairs = sorted(
+        zip(pred_indices, gt_indices), key=lambda pair: dists[pair[0], pair[1]]
+    )
+
+    tp = 0
+    matched_gt = set()
+    matched_pred = set()
+
+    for pred_idx, gt_idx in sorted_pairs:
+        if pred_idx not in matched_pred and gt_idx not in matched_gt:
+            tp += 1
+            matched_pred.add(pred_idx)
+            matched_gt.add(gt_idx)
+
+    fp = len(pred_coords) - len(matched_pred)
+    fn = len(gt_coords) - len(matched_gt)
+
+    return tp, fp, fn
+
+
+def compute_test_metrics(model_path, test_loader, dist_threshold=1.5):
+
+    model.load_state_dict(torch.load(model_path, map_location=device))
+    model.eval()
+
+    total_tp, total_fp, total_fn = 0, 0, 0
+
+    with torch.no_grad():
+        for images, gt_masks, gt_centroids in test_loader:
+            images = images.to(device)
+            pred_masks, pred_offsets = model(images)
+
+            pred_binary = (
+                (torch.sigmoid(pred_masks) > 0.5).squeeze(1).cpu().numpy()
+            )
+            pred_offsets_np = pred_offsets.cpu().numpy()
+
+            for i in range(images.size(0)):
+                pred_coords = extract_centroids(
+                    pred_binary[i], pred_offsets_np[i]
+                )
+
+                gt_coords = gt_centroids[i]
+                if isinstance(gt_coords, torch.Tensor):
+                    gt_coords = gt_coords.cpu().numpy()
+
+                tp, fp, fn = match_star_centroids(
+                    pred_coords, gt_coords, dist_threshold
+                )
+                total_tp += tp
+                total_fp += fp
+                total_fn += fn
+
+    #Paper Equations (13, 14, 15)
+    precision = (
+        (total_tp / (total_tp + total_fp) * 100)
+        if (total_tp + total_fp) > 0
+        else 0.0
+    )
+    recall = (
+        (total_tp / (total_tp + total_fn) * 100)
+        if (total_tp + total_fn) > 0
+        else 0.0
+    )
+    f1 = (
+        (2 * precision * recall / (precision + recall))
+        if (precision + recall) > 0
+        else 0.0
+    )
+
+    print("=" * 50)
+    print("PAPER EVALUATION METRICS")
+    print("=" * 50)
+    print(f"True Positives (TP)   : {total_tp}")
+    print(f"False Positives (FP)  : {total_fp}")
+    print(f"False Negatives (FN)  : {total_fn}")
+    print("-" * 50)
+    print(f"Precision (Eq. 13)    : {precision:.2f}%")
+    print(f"Recall    (Eq. 14)    : {recall:.2f}%")
+    print(f"F1 Score  (Eq. 15)    : {f1:.2f}%")
+    print("=" * 50)
+
+    return precision, recall, f1
+
+test_dataset = StarDataSet(
+    split="test",
+    data_dir="/content/CNNStarDetectCentroid/data_generation/training_data"
+)
+
+def star_collate_fn(batch):
+    images = torch.stack([torch.as_tensor(item[0]) for item in batch])
+    masks = torch.stack([torch.as_tensor(item[1]) for item in batch])
+    centroids = [item[3] if len(item) > 3 else item[2] for item in batch]
+    return images, masks, centroids
+
+
+test_loader = DataLoader(
+    test_dataset,
+    batch_size=4,
+    shuffle=False,
+    collate_fn=star_collate_fn
+)
+
+model_path = "/content/CNNStarDetectCentroid/training/models/latest_model.pt"
+precision, recall, f1 = compute_test_metrics(model_path, test_loader)
+
+with open(metrics_path, "w", newline="") as f:
+    writer = csv.writer(f)
+
+    writer.writerow([
+        "Precision",
+        "Recall",
+        "F1 Score"
+    ])
+
+    writer.writerow([
+        precision,
+        recall,
+        f1
+    ])
+
+print(f"Metrics saved to: {metrics_path}")
+import os
+import torch
+import numpy as np
+import scipy.spatial
+import csv
+from torch.utils.data import DataLoader
+from data_load import StarDataSet
+
+
+%cd /content/CNNStarDetectCentroid/training
+metrics_path = "/content/CNNStarDetectCentroid/training/test_metrics.csv"
+
+from neural_net.elunet import ELUnet
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
+
+model = ELUnet(in_channels=1, out_channels=2).to(device)
+
+def extract_centroids(pred_binary, pred_offsets):
+    y_indices, x_indices = np.where(pred_binary > 0)
+
+    if len(y_indices) == 0:
+        return np.empty((0, 2))
+
+    dx = pred_offsets[0, y_indices, x_indices]
+    dy = pred_offsets[1, y_indices, x_indices]
+
+    pred_x = x_indices + dx
+    pred_y = y_indices + dy
+
+    return np.column_stack((pred_x, pred_y))
+
+
+def match_star_centroids(pred_coords, gt_coords, dist_threshold=1.5):
+    if len(pred_coords) == 0:
+        return 0, 0, len(gt_coords)
+    if len(gt_coords) == 0:
+        return 0, len(pred_coords), 0
+
+    dists = scipy.spatial.distance.cdist(pred_coords, gt_coords)
+
+    pred_indices, gt_indices = np.where(dists <= dist_threshold)
+    sorted_pairs = sorted(
+        zip(pred_indices, gt_indices), key=lambda pair: dists[pair[0], pair[1]]
+    )
+
+    tp = 0
+    matched_gt = set()
+    matched_pred = set()
+
+    for pred_idx, gt_idx in sorted_pairs:
+        if pred_idx not in matched_pred and gt_idx not in matched_gt:
+            tp += 1
+            matched_pred.add(pred_idx)
+            matched_gt.add(gt_idx)
+
+    fp = len(pred_coords) - len(matched_pred)
+    fn = len(gt_coords) - len(matched_gt)
+
+    return tp, fp, fn
+
+
+def compute_test_metrics(model_path, test_loader, dist_threshold=1.5):
+
+    model.load_state_dict(torch.load(model_path, map_location=device))
+    model.eval()
+
+    total_tp, total_fp, total_fn = 0, 0, 0
+
+    with torch.no_grad():
+        for images, gt_masks, gt_centroids in test_loader:
+            images = images.to(device)
+            pred_masks, pred_offsets = model(images)
+
+            pred_binary = (
+                (torch.sigmoid(pred_masks) > 0.5).squeeze(1).cpu().numpy()
+            )
+            pred_offsets_np = pred_offsets.cpu().numpy()
+
+            for i in range(images.size(0)):
+                pred_coords = extract_centroids(
+                    pred_binary[i], pred_offsets_np[i]
+                )
+
+                gt_coords = gt_centroids[i]
+                if isinstance(gt_coords, torch.Tensor):
+                    gt_coords = gt_coords.cpu().numpy()
+
+                tp, fp, fn = match_star_centroids(
+                    pred_coords, gt_coords, dist_threshold
+                )
+                total_tp += tp
+                total_fp += fp
+                total_fn += fn
+
+    #Paper Equations (13, 14, 15)
+    precision = (
+        (total_tp / (total_tp + total_fp) * 100)
+        if (total_tp + total_fp) > 0
+        else 0.0
+    )
+    recall = (
+        (total_tp / (total_tp + total_fn) * 100)
+        if (total_tp + total_fn) > 0
+        else 0.0
+    )
+    f1 = (
+        (2 * precision * recall / (precision + recall))
+        if (precision + recall) > 0
+        else 0.0
+    )
+
+    print("=" * 50)
+    print("PAPER EVALUATION METRICS")
+    print("=" * 50)
+    print(f"True Positives (TP)   : {total_tp}")
+    print(f"False Positives (FP)  : {total_fp}")
+    print(f"False Negatives (FN)  : {total_fn}")
+    print("-" * 50)
+    print(f"Precision (Eq. 13)    : {precision:.2f}%")
+    print(f"Recall    (Eq. 14)    : {recall:.2f}%")
+    print(f"F1 Score  (Eq. 15)    : {f1:.2f}%")
+    print("=" * 50)
+
+    return precision, recall, f1
+
+test_dataset = StarDataSet(
+    split="test",
+    data_dir="/content/CNNStarDetectCentroid/data_generation/training_data"
+)
+
+def star_collate_fn(batch):
+    images = torch.stack([torch.as_tensor(item[0]) for item in batch])
+    masks = torch.stack([torch.as_tensor(item[1]) for item in batch])
+    centroids = [item[3] if len(item) > 3 else item[2] for item in batch]
+    return images, masks, centroids
+
+
+test_loader = DataLoader(
+    test_dataset,
+    batch_size=4,
+    shuffle=False,
+    collate_fn=star_collate_fn
+)
+
+model_path = "/content/CNNStarDetectCentroid/training/models/latest_model.pt"
+precision, recall, f1 = compute_test_metrics(model_path, test_loader)
+
+with open(metrics_path, "w", newline="") as f:
+    writer = csv.writer(f)
+
+    writer.writerow([
+        "Precision",
+        "Recall",
+        "F1 Score"
+    ])
+
+    writer.writerow([
+        precision,
+        recall,
+        f1
+    ])
+
+print(f"Metrics saved to: {metrics_path}")
