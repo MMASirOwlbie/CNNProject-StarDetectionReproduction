@@ -1,5 +1,6 @@
 Star Detection & Recognition System using CNNs (Reproduction)
 
+Reproduction by Muhammad Muneeb Ahmed (31588) and Ushna Jalil (30911).
 This repository is a reproduction of the `ELUnet` star detection and sub-pixel centroid regression pipeline based on HongruiZhao/CNNStarDetectCentroid, with a generated dataset of synthetic star images simulated over stray-light dark frames.
 
 
