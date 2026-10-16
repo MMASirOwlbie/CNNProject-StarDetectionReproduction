@@ -393,7 +393,6 @@ from torch.utils.data import DataLoader
 from data_load import StarDataSet
 
 
-%cd /content/CNNStarDetectCentroid/training
 metrics_path = "/content/CNNStarDetectCentroid/training/test_metrics.csv"
 
 from neural_net.elunet import ELUnet
@@ -558,7 +557,6 @@ from torch.utils.data import DataLoader
 from data_load import StarDataSet
 
 
-%cd /content/CNNStarDetectCentroid/training
 metrics_path = "/content/CNNStarDetectCentroid/training/test_metrics.csv"
 
 from neural_net.elunet import ELUnet
