@@ -5,8 +5,7 @@ from torchvision.transforms import Normalize
 import torch
 import numpy as np
 import argparse
-from visualization import visualization
-
+from training.visualization import visualization
 
 class StarDataSet(data.Dataset):
     """
