@@ -5,7 +5,6 @@ from torchvision.transforms import Normalize
 import torch
 import numpy as np
 import argparse
-from training.visualization import visualization
 
 class StarDataSet(data.Dataset):
     """
@@ -158,4 +157,5 @@ if __name__ == '__main__':
         # get a fake groundtruth prediction 
         _, _, _, centroid_est = batch_val 
         # visualization
+        from training.visualization import visualization
         visualization(None, dist_map[0], seg_map[0], centroid_real[0], centroid_est[0], centroid_est[0], images[0][0], 6/1000)
