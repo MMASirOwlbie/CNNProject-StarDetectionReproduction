@@ -6,8 +6,16 @@ import matplotlib.pyplot as plt
 from matplotlib import colors
 import cv2
 import argparse
-from conventional_centroiding.threshold_method import centroid_com, detection_globalThreshold, centroiding_CenterOfMass, detection_ST16, centroiding_GaussianGrid, detection_WITM, detection_erosion_dilation
-from evaluation import trilateration_centroid, compute_centroid_error
+from training.conventional_centroiding.threshold_method import (
+    centroid_com,
+    detection_globalThreshold,
+    centroiding_CenterOfMass,
+    detection_ST16,
+    centroiding_GaussianGrid,
+    detection_WITM,
+    detection_erosion_dilation,
+)
+from training.evaluation import trilateration_centroid, compute_centroid_error
 from torchvision.transforms import Normalize
 
 
