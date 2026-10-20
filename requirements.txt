@@ -6,3 +6,5 @@ matplotlib
 tensorboard
 thop
 gdown
+streamlit
+pillow
