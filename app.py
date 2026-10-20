@@ -258,9 +258,6 @@ if mode == "Image Detection":
                         seg_mask, dist_map, centroids = detect_stars(
                             model, image_array
                         )
-                        st.write("Distance map minimum:", float(dist_map.min()))
-                        st.write("Distance map maximum:", float(dist_map.max()))
-                        st.write("Distance map mean:", float(dist_map.mean()))
 
                     overlay = pil_image.convert("RGB")
                     draw = ImageDraw.Draw(overlay)
