@@ -529,7 +529,7 @@ test_loader = DataLoader(
     collate_fn=star_collate_fn
 )
 
-model_path = "/content/CNNStarDetectCentroid/training/models/latest_model.pt"
+model_path = "  /content/drive/MyDrive/CNNStarDetection/checkpoints/latest_model.pt"
 precision, recall, f1 = compute_test_metrics(model_path, test_loader)
 
 with open(metrics_path, "w", newline="") as f:
