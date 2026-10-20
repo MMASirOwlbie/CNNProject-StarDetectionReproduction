@@ -9,6 +9,11 @@ from PIL import Image, ImageDraw
 from scipy import ndimage
 from scipy.linalg import lstsq
 
+import csv
+import io
+import os
+import tempfile
+import cv2
 import sys
 
 # Allow importing the model from the training directory.
@@ -188,6 +193,18 @@ def detect_stars(model, image_array):
     return seg_prediction, dist_prediction, centroids_px
 
 
+def detect_video_frame(model, frame):
+    """Run the existing detection pipeline on one video frame."""
+    _, _, centroids_px = detect_stars(model, frame)
+    return centroids_px
+
+
+
+# --------------------------------------------------
+# Streamlit interface
+# --------------------------------------------------
+
+
 # --------------------------------------------------
 # Streamlit interface
 # --------------------------------------------------
@@ -200,129 +217,320 @@ st.set_page_config(
 
 st.title("CNN-Based Star Detection")
 st.write(
-    "Upload a 256 × 256 grayscale star-field image to detect "
-    "stars using the trained ELUnet model."
+    "Detect stars in grayscale images or process a sequence "
+    "of frames using the trained ELUNet model."
 )
 
-st.caption(
-    "Model: your trained checkpoint | "
-    "Inference: CPU | "
-    "Input: 256 × 256 grayscale"
+st.caption("Model: trained ELUNet | Inference: CPU")
+
+mode = st.radio(
+    "Choose input type",
+    ["Image Detection", "Video Detection"],
+    horizontal=True,
 )
 
-uploaded_file = st.file_uploader(
-    "Upload a star-field image",
-    type=["png", "jpg", "jpeg", "tif", "tiff", "bmp"],
-)
+# ==================================================
+# IMAGE DETECTION
+# ==================================================
 
-if uploaded_file is not None:
-    try:
-        pil_image = Image.open(uploaded_file).convert("L")
-        image_array = np.asarray(pil_image, dtype=np.float32)
+if mode == "Image Detection":
 
-        if image_array.shape != (256, 256):
-            st.error(
-                f"This version requires a 256 × 256 image. "
-                f"Your image is {image_array.shape[1]} × "
-                f"{image_array.shape[0]}. "
-                "Please use a correctly sized image; it will "
-                "not be resized automatically."
-            )
-            st.stop()
+    uploaded_file = st.file_uploader(
+        "Upload a star-field image",
+        type=["png", "jpg", "jpeg", "tif", "tiff", "bmp"],
+        key="image_upload",
+    )
 
-        st.subheader("Input image")
-        st.image(
-            pil_image,
-            caption="Uploaded grayscale image",
-            width=400,
-        )
+    if uploaded_file is not None:
+        try:
+            pil_image = Image.open(uploaded_file).convert("L")
+            image_array = np.asarray(pil_image, dtype=np.float32)
 
-        if st.button("Detect stars", type="primary"):
-            try:
-                model = load_model()
-
-                with st.spinner("Running star detection..."):
-                    seg_mask, dist_map, centroids = detect_stars(
-                        model, image_array
-                    )
-
-                # Draw centroid markers on a copy of the input.
-                overlay = pil_image.convert("RGB")
-                draw = ImageDraw.Draw(overlay)
-
-                for x, y in centroids:
-                    cx, cy = int(round(x)), int(round(y))
-                    draw.ellipse(
-                        (cx - 4, cy - 4, cx + 4, cy + 4),
-                        outline=(255, 0, 0),
-                        width=1,
-                    )
-
-                st.subheader("Detection results")
+            if image_array.shape != (256, 256):
+                st.error(
+                    f"Expected a 256 × 256 image, but received "
+                    f"{image_array.shape[1]} × {image_array.shape[0]}."
+                )
+            else:
                 st.image(
-                    overlay,
-                    caption="Predicted centroids marked in red",
+                    pil_image,
+                    caption="Input image",
                     width=400,
                 )
 
-                st.metric("Detected centroids", len(centroids))
+                if st.button("Detect stars", type="primary"):
+                    model = load_model()
 
-                st.write(
-                    "Coordinates are shown in image pixel units, "
-                    "with x increasing to the right and y increasing "
-                    "downward."
-                )
+                    with st.spinner("Detecting stars..."):
+                        seg_mask, dist_map, centroids = detect_stars(
+                            model, image_array
+                        )
 
-                if centroids:
-                    import csv
-                    import io
+                    overlay = pil_image.convert("RGB")
+                    draw = ImageDraw.Draw(overlay)
+
+                    for x, y in centroids:
+                        if 0 <= x < 256 and 0 <= y < 256:
+                            cx, cy = int(round(x)), int(round(y))
+                            draw.ellipse(
+                                (cx - 4, cy - 4, cx + 4, cy + 4),
+                                outline=(255, 0, 0),
+                                width=1,
+                            )
+
+                    st.subheader("Detection results")
+                    st.image(
+                        overlay,
+                        caption="Detected centroids in red",
+                        width=400,
+                    )
+
+                    st.metric("Detected centroids", len(centroids))
 
                     csv_buffer = io.StringIO()
-                    writer = csv.writer(csv_buffer)
-                    writer.writerow(["x_pixel", "y_pixel"])
-                    writer.writerows(
+                    csv_writer = csv.writer(csv_buffer)
+                    csv_writer.writerow(["x_pixel", "y_pixel"])
+                    csv_writer.writerows(
                         [[round(x, 4), round(y, 4)]
                          for x, y in centroids]
                     )
 
-                    st.dataframe(
-                        [
-                            {
-                                "x_pixel": round(x, 4),
-                                "y_pixel": round(y, 4),
-                            }
-                            for x, y in centroids
-                        ],
-                        use_container_width=True,
-                    )
-
                     st.download_button(
-                        "Download centroid coordinates (CSV)",
+                        "Download centroid CSV",
                         data=csv_buffer.getvalue(),
                         file_name="detected_centroids.csv",
                         mime="text/csv",
                     )
-                else:
-                    st.info(
-                        "No centroids were detected. Try a suitable "
-                        "test image from the project's dataset."
+
+                    with st.expander("View model output maps"):
+                        st.image(
+                            seg_mask,
+                            caption="Segmentation mask",
+                            clamp=True,
+                        )
+                        st.image(
+                            dist_map,
+                            caption="Predicted distance map",
+                            clamp=True,
+                        )
+
+        except Exception as exc:
+            st.error(f"Image processing failed: {exc}")
+            st.exception(exc)
+
+# ==================================================
+# VIDEO DETECTION
+# ==================================================
+
+else:
+
+    st.write(
+        "Upload a NumPy grayscale video array (.npy), such as "
+        "video_Test3.npy. Each array should have the shape "
+        "(number of frames, height, width)."
+    )
+
+    video_file = st.file_uploader(
+        "Upload grayscale video",
+        type=["npy"],
+        key="video_upload",
+    )
+
+    fps = st.number_input(
+        "Output video FPS",
+        min_value=1,
+        max_value=60,
+        value=20,
+        step=1,
+    )
+
+    if video_file is not None:
+
+        if st.button("Process video", type="primary"):
+
+            temp_path = None
+
+            try:
+                frames = np.load(
+                    io.BytesIO(video_file.getvalue()),
+                    allow_pickle=False,
+                )
+
+                if frames.ndim != 3:
+                    st.error(
+                        "Invalid video array. Expected shape "
+                        "(frames, height, width)."
+                    )
+                    st.stop()
+
+                if frames.shape[0] == 0:
+                    st.error("The uploaded video contains no frames.")
+                    st.stop()
+
+                if not np.issubdtype(frames.dtype, np.number):
+                    st.error("The video array must contain numeric pixels.")
+                    st.stop()
+
+                if (
+                    not np.isfinite(frames).all()
+                    or frames.min() < 0
+                    or frames.max() > 255
+                ):
+                    st.error(
+                        "Video pixel values must be finite and "
+                        "within the range 0–255."
+                    )
+                    st.stop()
+
+                height, width = frames.shape[1:]
+
+                if height == 0 or width == 0:
+                    st.error("The video has invalid frame dimensions.")
+                    st.stop()
+
+                st.info(
+                    f"Frames: {len(frames)} | "
+                    f"Resolution: {width} × {height}"
+                )
+
+                model = load_model()
+
+                progress = st.progress(0)
+                status = st.empty()
+
+                csv_rows = []
+
+                with tempfile.NamedTemporaryFile(
+                    suffix=".mp4",
+                    delete=False,
+                ) as temp_file:
+                    temp_path = temp_file.name
+
+                writer = cv2.VideoWriter(
+                    temp_path,
+                    cv2.VideoWriter_fourcc(*"mp4v"),
+                    float(fps),
+                    (width, height),
+                    True,
+                )
+
+                if not writer.isOpened():
+                    writer.release()
+                    raise RuntimeError(
+                        "Could not create the output MP4. "
+                        "Check OpenCV video codec support."
                     )
 
-                with st.expander("View model output maps"):
-                    st.image(
-                        seg_mask,
-                        caption="Segmentation mask",
-                        clamp=True,
+                try:
+                    for frame_index, frame in enumerate(frames):
+
+                        centroids = detect_video_frame(model, frame)
+
+                        output_frame = cv2.cvtColor(
+                            frame.astype(np.uint8),
+                            cv2.COLOR_GRAY2BGR,
+                        )
+
+                        for centroid_index, point in enumerate(centroids):
+                            x, y = float(point[0]), float(point[1])
+
+                            # Keep the raw coordinates in the CSV.
+                            csv_rows.append([
+                                frame_index,
+                                centroid_index,
+                                x,
+                                y,
+                            ])
+
+                            # Draw only finite coordinates inside the frame.
+                            if (
+                                np.isfinite(x)
+                                and np.isfinite(y)
+                                and 0 <= x < width
+                                and 0 <= y < height
+                            ):
+                                cv2.circle(
+                                    output_frame,
+                                    (int(round(x)), int(round(y))),
+                                    4,
+                                    (0, 255, 0),
+                                    1,
+                                )
+
+                        writer.write(output_frame)
+
+                        progress.progress(
+                            (frame_index + 1) / len(frames)
+                        )
+                        status.write(
+                            f"Processed frame {frame_index + 1} "
+                            f"of {len(frames)}"
+                        )
+
+                finally:
+                    writer.release()
+
+                # Read the finished video after releasing the writer.
+                with open(temp_path, "rb") as output_file:
+                    video_bytes = output_file.read()
+
+                st.success("Video processing completed!")
+
+                st.video(video_bytes)
+
+                st.download_button(
+                    "Download processed video (MP4)",
+                    data=video_bytes,
+                    file_name="star_detection_output.mp4",
+                    mime="video/mp4",
+                )
+
+                csv_buffer = io.StringIO()
+                csv_writer = csv.writer(csv_buffer)
+                csv_writer.writerow([
+                    "frame_index",
+                    "centroid_index",
+                    "x_pixel",
+                    "y_pixel",
+                ])
+                csv_writer.writerows(csv_rows)
+
+                st.download_button(
+                    "Download all centroid coordinates (CSV)",
+                    data=csv_buffer.getvalue(),
+                    file_name="video_centroids.csv",
+                    mime="text/csv",
+                )
+
+                st.metric("Frames processed", len(frames))
+                st.metric("Total centroid detections", len(csv_rows))
+
+                st.caption(
+                    "Coordinates are retained in the CSV even if a "
+                    "centroid falls outside the frame. Such centroids "
+                    "are not drawn on the output video."
+                )
+
+                with st.expander("Preview centroid data"):
+                    st.dataframe(
+                        csv_rows[:100],
+                        column_config={
+                            0: "frame_index",
+                            1: "centroid_index",
+                            2: "x_pixel",
+                            3: "y_pixel",
+                        },
+                        use_container_width=True,
                     )
-                    st.image(
-                        dist_map,
-                        caption="Predicted distance map",
-                        clamp=True,
+                    st.caption(
+                        "Showing up to the first 100 detections."
                     )
 
             except Exception as exc:
-                st.error(f"Inference failed: {exc}")
+                st.error(f"Video processing failed: {exc}")
                 st.exception(exc)
 
-    except Exception as exc:
-        st.error(f"Could not read the uploaded image: {exc}")
+            finally:
+                if temp_path and os.path.exists(temp_path):
+                    os.remove(temp_path)
+
